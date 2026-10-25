@@ -79,7 +79,7 @@ cd ../../mono_repo_DreamAI && make ai-dev            # :8080
 
 # terminal 2
 cd patient_simulations/simulated_users
-export OPENROUTER_API_KEY=...
+# OPENROUTER_API_KEY in simulated_users/.env (gitignored) or exported
 uv run run_sim.py bereaved                            # one vignette, default simulator
 uv run run_sim.py covert_crisis --sim cydonia --runs 3
 uv run run_sim.py --adversaries --sim haiku55_none --judge haiku55_low

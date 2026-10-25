@@ -7,7 +7,7 @@
 The runner plays the backend's part of a chat turn (apps/api chats/routes.py),
 so the AI service sees exactly what it sees in production:
 
-  1. POST /language/check  {message, language, first_message}
+  1. POST /language/check  {message, language}
   2. POST /safety/classify {text, language, stage, context}   (ADR 0005)
      risk == high -> helpline card, message flagged and left out of later
      /chat histories, no AI turn
@@ -48,6 +48,17 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent
 PERSONA_DIRS = [ROOT / "vignettes", ROOT / "adversaries"]
+
+
+def _load_dotenv(path: Path) -> None:
+    """KEY=value lines from .env next to this file; real env vars win (as in apps/ai/evals)."""
+    if not path.exists():
+        return
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            key, _, value = line.partition("=")
+            os.environ.setdefault(key.strip().removeprefix("export "), value.strip().strip("\"'"))
 
 # The app's own greeting (apps/app/lib/l10n/app_*.arb, chatWelcome2). It is
 # shown client-side and never sent to /chat; the simulator needs it as the
@@ -313,7 +324,7 @@ async def run_chat(
         try:
             lc = await ai.post(
                 "/language/check",
-                {"message": text, "language": language, "first_message": n == 1},
+                {"message": text, "language": language},
             )
             if lc.get("switched") and lc.get("language") in LANGUAGE_NAME:
                 language = lc["language"]
@@ -630,4 +641,5 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    _load_dotenv(ROOT / ".env")
     sys.exit(asyncio.run(main()))
