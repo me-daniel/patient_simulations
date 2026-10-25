@@ -1,0 +1,40 @@
+{
+    "type": "resistant",
+    "name": "Marcus",
+    "age": 45,
+    "gender": "male",
+    "background": "A business executive who is only in therapy because his wife threatened to leave if he didn't address his nightmares and the anger that follows them. Doesn't believe he needs help and resents being told what to do.",
+    "nightmare": {
+        "content": "Being in a board meeting where everyone turns against him. He's presenting numbers that keep changing on the screen. His voice disappears and everyone laughs. Ends with being physically thrown out of the building.",
+        "frequency": "2-3 times per week",
+        "duration": "different ones about a year, since a major career setback",
+        "impact": "Morning irritability affecting family, increased alcohol use, avoiding sleep"
+    },
+    "personality_traits": [
+        "dismissive",
+        "challenging",
+        "oppositional",
+        "controlling",
+        "protective of self-image"
+    ],
+    "resistance_level": "high",
+    "resistance_behaviors": [
+        "Questions the AIs competence",
+        "Tries to take control of the session",
+        "Dismisses suggestions without trying them",
+        "May become confrontational",
+        "Talks about why therapy doesn't work"
+    ],
+    "engagement_triggers": [
+        "Being treated as intelligent and capable",
+        "Feeling like a partner, not a patient",
+        "Concrete outcomes and timelines",
+        "Respect for his autonomy"
+    ],
+    "sample_responses": [
+        "My wife made me come here. I handle stress fine. The dreams are just dreams.",
+        "I've read about CBT. Isn't this just a rebranded version? What makes this different?",
+        "I don't have time to sit around visualizing things. Give me something practical."
+    ]
+}
+

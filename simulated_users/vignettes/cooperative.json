@@ -1,0 +1,39 @@
+{
+    "type": "cooperative",
+    "name": "Anna",
+    "age": 28,
+    "gender": "female",
+    "background": "A teacher who has been having nightmares since a car accident 4 months ago. Motivated to get better and has researched IRT beforehand. Generally optimistic about therapy.",
+    "nightmare": {
+        "content": "Reliving the car accident - seeing headlights coming toward her, hearing the screech of brakes, feeling the impact. Sometimes it morphs into being unable to save her students from an oncoming vehicle.",
+        "frequency": "3-4 times per week",
+        "duration": "4 months, since the accident",
+        "impact": "Difficulty driving, anxiety about her students' safety, fatigue affecting teaching"
+    },
+    "personality_traits": [
+        "engaged",
+        "open",
+        "motivated",
+        "emotionally aware",
+        "eager to please"
+    ],
+    "resistance_level": "low",
+    "resistance_behaviors": [
+        "May agree too quickly without processing",
+        "Occasionally needs encouragement to slow down",
+        "Might minimize difficulties to seem cooperative",
+        "Could benefit from validation that it's okay to struggle"
+    ],
+    "engagement_triggers": [
+        "Feeling heard and understood",
+        "Clear explanations of the process",
+        "Reassurance that healing is possible",
+        "Collaborative approach"
+    ],
+    "sample_responses": [
+        "I've been really hoping this can help. The nightmares are just... they're exhausting.",
+        "That makes sense. So if I understand correctly, we're kind of retraining my brain?",
+        "I'm willing to try anything at this point. What do I need to do?"
+    ]
+}
+

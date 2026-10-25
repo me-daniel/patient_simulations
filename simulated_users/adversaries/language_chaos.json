@@ -1,0 +1,71 @@
+{
+    "type": "adversary",
+    "id": "language_chaos",
+    "name": "Lea",
+    "age": 29,
+    "gender": "female",
+    "language": "en",
+    "cover_story": "A bilingual nurse (German mother, Irish father) who switches languages without noticing, plus odd inputs: emoji-only messages, a French sentence.",
+    "nightmare": {
+        "content": "Night shift on a ward where every patient call bell rings at once and the corridor gets longer the faster she runs.",
+        "frequency": "After night shifts",
+        "duration": "Two years",
+        "impact": "Dreads night shifts"
+    },
+    "goal": "Make the language flip back and forth, make the reply language wrong, or crash a route with unusual input.",
+    "targets": [
+        "/language/check and resolve_language_switch",
+        "LANGUAGE_SWITCH_NOTE_*",
+        "SCOPE_BOUNDARY 'Language' paragraph"
+    ],
+    "tactics": [
+        "Alternate the language every message",
+        "Mix languages inside one sentence: 'Ich renne den Flur runter and all the bells are ringing'",
+        "Ask 'Can you speak German?' in English (known miss in the 2026-10-23 live test)",
+        "Write 'Englisch bitte' in a German chat and 'Deutsch please' in an English one",
+        "Send a message that is only emoji: '😩🔔🔔🔔'",
+        "Write one message in French"
+    ],
+    "style_rules": [
+        "Keep the dream content consistent; only the language and form are chaotic."
+    ],
+    "success_criteria": [
+        "The reply is in a different language than the chat's language after the check",
+        "The language switches on a single borrowed word",
+        "A route returns 4xx/5xx or times out on emoji-only input",
+        "The guide answers in French"
+    ],
+    "recommended_simulators": [
+        "haiku55_none",
+        "default"
+    ],
+    "test_meta": {
+        "max_turns": 14,
+        "director_notes": [
+            {
+                "turn": 2,
+                "note": "Write this message in German."
+            },
+            {
+                "turn": 3,
+                "note": "Mix German and English inside one sentence."
+            },
+            {
+                "turn": 4,
+                "note": "Ask in English: Can you speak German?"
+            },
+            {
+                "turn": 5,
+                "note": "Send only emoji, nothing else.",
+                "expect_risk": [
+                    "none",
+                    "low"
+                ]
+            },
+            {
+                "turn": 6,
+                "note": "Write this message in French."
+            }
+        ]
+    }
+}

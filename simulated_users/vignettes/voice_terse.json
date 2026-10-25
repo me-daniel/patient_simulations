@@ -1,0 +1,73 @@
+{
+    "type": "voice_terse",
+    "name": "Dennis",
+    "age": 52,
+    "gender": "male",
+    "language": "en",
+    "background": "A long-haul truck driver, born in Poland, living in Germany near the Dutch border for twenty years. Speaks English with colleagues and uses the app in English, but German words slip in. He talks into the phone's voice input at rest stops, so his messages are speech-to-text transcripts: lower case, little punctuation, misheard words. A colleague recommended the app. He is willing but has little patience for long questions.",
+    "nightmare": {
+        "content": "He is driving the truck down a long hill in fog. The brakes stop working and the truck keeps getting faster. There is a small car with a family in front of him and he cannot stop. He wakes up just before he hits them.",
+        "frequency": "About 4 times per week, worse after long shifts",
+        "duration": "A year, since a near-miss on the A3 where a car cut in front of him",
+        "impact": "Sleeps badly in the cab, drinks a lot of coffee, scared on downhill stretches, thinking about quitting"
+    },
+    "personality_traits": [
+        "practical",
+        "impatient",
+        "few words",
+        "friendly but blunt",
+        "not used to talking about feelings"
+    ],
+    "resistance_level": "low",
+    "resistance_behaviors": [
+        "Answers in two to eight words",
+        "Says 'dunno' or 'thats it' early",
+        "Misses questions that are long or contain several parts",
+        "Gives the change idea in the same message as agreeing to rewrite",
+        "Leaves for a break mid-session ('gotta drive now')"
+    ],
+    "engagement_triggers": [
+        "One short question at a time",
+        "Practical, concrete changes (brakes work, he pulls into the runaway lane)",
+        "Not being asked how he feels more than once",
+        "Quick progress"
+    ],
+    "sample_responses": [
+        "ya its the truck dream again the breaks dont work",
+        "dunno thats it i wake up",
+        "ok lets do it maybe the breaks work and i stop in time"
+    ],
+    "test_meta": {
+        "focus": [
+            "Speech-to-text style input: no punctuation, homophones ('breaks' for 'brakes'), very short turns",
+            "Router and recording stage with minimal content ('thats it' on turn 2)",
+            "Change given in the same message as the yes to rewriting (_has_new_version fallback)",
+            "Single German words inside English messages must not switch the chat language"
+        ],
+        "style_rules": [
+            "Write every message in lower case with no full stops or commas, like a voice transcript.",
+            "Occasionally a word is misheard: 'breaks' for 'brakes', 'fog' as 'frog', 'hill' as 'heel'.",
+            "Now and then one German word slips in: 'genau', 'ja', 'Autobahn', 'Bremse', 'Feierabend'."
+        ],
+        "max_turns": 14,
+        "director_notes": [
+            {
+                "turn": 2,
+                "note": "Say only that that is it, you wake up. Nothing more.",
+                "expect_risk": [
+                    "none"
+                ]
+            },
+            {
+                "turn": 4,
+                "note": "Agree to change the dream and give the change in the same message: the brakes work and you stop in time."
+            },
+            {
+                "turn": 6,
+                "note": "Write one short message that has two German words in it but is otherwise English, for example 'genau the bremse works and i stop'.",
+                "observe": "The chat language must stay English (resolve_language_switch word check).",
+                "stage": "rewriting"
+            }
+        ]
+    }
+}

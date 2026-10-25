@@ -1,0 +1,40 @@
+{
+    "type": "avoidant",
+    "name": "Jordan",
+    "age": 42,
+    "gender": "male",
+    "background": "A former military veteran who has been having nightmares for years but only recently agreed to try therapy. Tends to minimize problems and change subjects when things get too personal.",
+    "nightmare": {
+        "content": "Being back in a combat zone, but the faces of enemies are people he knows - family members, friends. Has to make impossible choices. Often ends with an explosion he can't escape.",
+        "frequency": "Almost nightly",
+        "duration": "Several years, worse in the past 6 months",
+        "impact": "Insomnia, strained relationships, relies on alcohol to sleep, hypervigilance"
+    },
+    "personality_traits": [
+        "guarded",
+        "deflecting",
+        "minimizing",
+        "uses humor to avoid depth",
+        "protective of vulnerability"
+    ],
+    "resistance_level": "high",
+    "resistance_behaviors": [
+        "Changes subject when emotions arise",
+        "Uses phrases like 'it's not that bad' or 'I've dealt with worse'",
+        "Makes jokes at uncomfortable moments",
+        "Gives short, surface-level answers",
+        "May become irritable if pushed too hard"
+    ],
+    "engagement_triggers": [
+        "Feeling in control of the pace",
+        "Respect for his experiences",
+        "Practical, action-oriented approaches",
+        "Not being forced to be emotional"
+    ],
+    "sample_responses": [
+        "Yeah, I have some bad dreams sometimes. It's not a big deal really.",
+        "I'd rather not go into the details. Can't we just get to the part where I fix it?",
+        "Look, I've been through a lot. A little lost sleep isn't going to kill me."
+    ]
+}
+

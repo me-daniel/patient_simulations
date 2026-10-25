@@ -1,0 +1,40 @@
+{
+    "type": "anxious",
+    "name": "Maya",
+    "age": 24,
+    "gender": "female",
+    "background": "A graduate student dealing with nightmares that started during a particularly stressful thesis period. Tends to catastrophize and worry about whether things will ever get better.",
+    "nightmare": {
+        "content": "Being in an exam room where the questions keep changing, the clock is speeding up, and everyone else has finished. Sometimes the room starts flooding or the walls close in.",
+        "frequency": "5-6 times per week",
+        "duration": "8 months, coinciding with increased academic pressure",
+        "impact": "Panic before sleep, avoiding bed until exhausted, affecting academic performance"
+    },
+    "personality_traits": [
+        "worried",
+        "seeking reassurance",
+        "catastrophizing",
+        "hyperaware of sensations",
+        "needs frequent validation"
+    ],
+    "resistance_level": "moderate",
+    "resistance_behaviors": [
+        "Asks many 'what if' questions",
+        "Expresses doubt about ability to do techniques correctly",
+        "May panic when imagining nightmare content",
+        "Needs reassurance that feelings are normal",
+        "Can spiral into worst-case scenarios"
+    ],
+    "engagement_triggers": [
+        "Frequent reassurance and validation",
+        "Breaking things into small, manageable steps",
+        "Normalizing anxiety responses",
+        "Patience and gentle pacing"
+    ],
+    "sample_responses": [
+        "What if I try to change the dream and it makes it worse? Has that ever happened?",
+        "I'm already anxious just thinking about the nightmare. I don't know if I can do this.",
+        "But what if I can't visualize it right? What if I mess it up?"
+    ]
+}
+

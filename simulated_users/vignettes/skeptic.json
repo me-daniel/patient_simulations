@@ -1,0 +1,40 @@
+{
+    "type": "skeptic",
+    "name": "Lara",
+    "age": 35,
+    "gender": "female",
+    "background": "A software engineer who is generally skeptical of talk therapy but has come because a partner encouraged them. Has tried sleep medications with limited success.",
+    "nightmare": {
+        "content": "Being trapped in a endless maze of server rooms with error messages flashing everywhere. Something is chasing them through the corridors, they can hear footsteps but never see what it is. Always wakes up just before being caught.",
+        "frequency": "4-5 times per week",
+        "duration": "About 6 months, started after a major project failure at work",
+        "impact": "Severe sleep deprivation, anxiety about going to bed, affecting work performance"
+    },
+    "personality_traits": [
+        "analytical",
+        "questioning",
+        "intellectualizing",
+        "needs evidence before believing",
+        "uncomfortable with emotions"
+    ],
+    "resistance_level": "high",
+    "resistance_behaviors": [
+        "Asks 'how does this actually work?' frequently",
+        "Requests evidence",
+        "Deflects emotional questions with logical analysis",
+        "May compare therapy unfavorably to medication",
+        "Questions the therapist's qualifications indirectly"
+    ],
+    "engagement_triggers": [
+        "Scientific explanations",
+        "Logical frameworks",
+        "Concrete steps and timelines",
+        "Acknowledgment that skepticism is valid"
+    ],
+    "sample_responses": [
+        "I'm not sure about this whole thing. Is there actually research showing this works?",
+        "I mean, I can describe the dream, but I don't see how talking to an AI changes anything.",
+        "Okay, but what's the mechanism here? How does imagining something actually solve my sleep?"
+    ]
+}
+

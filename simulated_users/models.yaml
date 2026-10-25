@@ -1,0 +1,83 @@
+# Model menu for the simulated user (patient or adversary) and the optional judge.
+# Pick one with --sim / --judge. All via OpenRouter (OPENROUTER_API_KEY), the
+# same policy as measure-ai-drift (github.com/me-daniel/measure-ai-drift).
+#
+# Model IDs and supported parameters checked against
+# https://openrouter.ai/api/v1/models on 2026-10-25. Re-check before a batch:
+# OpenRouter delists and renames (the ":free" Venice variant that
+# measure-ai-drift used is gone).
+
+providers:
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    api_key_env: OPENROUTER_API_KEY
+
+simulators:
+  # --- Default: measure-ai-drift's patient model ---
+  default:
+    model: cognitivecomputations/dolphin-mistral-24b-venice-edition
+    temperature: 0.7
+    max_tokens: 512
+    notes: "Uncensored Mistral Small 24B fine-tune. Plays trauma and crisis content without refusing. Paid now ($0.20/$0.90 per M), the :free slug is delisted."
+
+  # --- Haiku 5.5: cheap, fast, safety-trained. Expect some refusals on crisis personas ---
+  # OpenRouter lists NO temperature for Haiku 5.5 (supported: reasoning,
+  # reasoning_effort, max_tokens, ...), so none is sent. Variance comes from
+  # the model's own default sampling; repeat runs to see it.
+  haiku55_none:
+    model: anthropic/claude-haiku-5.5
+    max_tokens: 400
+    extra_params:
+      reasoning:
+        effort: none
+      provider:
+        order: ["anthropic"]
+        allow_fallbacks: false
+    notes: "Non-reasoning. $0.10/$0.50 per M. Check usage.reasoning_tokens == 0 on the first run [VERIFY]."
+  haiku55_low:
+    model: anthropic/claude-haiku-5.5
+    max_tokens: 1500   # reasoning tokens count against max_tokens
+    extra_params:
+      reasoning:
+        effort: low
+      provider:
+        order: ["anthropic"]
+        allow_fallbacks: false
+    notes: "Low reasoning. Better at multi-turn tactics (prompt_injector, stage_saboteur)."
+
+  # --- Uncensored / roleplay models for extreme edge cases ---
+  cydonia:
+    model: thedrummer/cydonia-24b-v4.1
+    temperature: 0.8
+    max_tokens: 512
+    notes: "Uncensored creative-writing fine-tune of Mistral Small 3.2 24B. $0.30/$0.50. Use for covert_crisis, violent_rescripter."
+  aion35_mini:
+    model: aion-labs/aion-3.5-mini
+    temperature: 0.8
+    max_tokens: 512
+    notes: "Roleplay system on GLM (2026-09). Strong at staying in character and building tension. $0.70/$1.40."
+  hermes4_405b:
+    model: nousresearch/hermes-4-405b
+    temperature: 0.7
+    max_tokens: 600
+    extra_params:
+      reasoning:
+        enabled: false
+    notes: "Steerable, low-refusal Llama 3.1 405B. Good at structured multi-step attacks. $1/$3."
+
+judges:
+  haiku55_low:
+    model: anthropic/claude-haiku-5.5
+    max_tokens: 3000
+    extra_params:
+      reasoning:
+        effort: low
+      response_format:
+        type: json_object
+  hermes4_405b:
+    model: nousresearch/hermes-4-405b
+    temperature: 0.0
+    max_tokens: 1500
+    extra_params:
+      response_format:
+        type: json_object

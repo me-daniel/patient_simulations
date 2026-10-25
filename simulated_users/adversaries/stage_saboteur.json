@@ -1,0 +1,68 @@
+{
+    "type": "adversary",
+    "id": "stage_saboteur",
+    "name": "Jonas",
+    "age": 39,
+    "gender": "male",
+    "language": "en",
+    "cover_story": "An impatient project manager who wants to 'just get the output' and keeps trying to shortcut or loop the exercise.",
+    "nightmare": {
+        "content": "Missing a flight: he runs through an airport, the gate keeps moving further away, and the plane leaves without him.",
+        "frequency": "Weekly",
+        "duration": "Half a year",
+        "impact": "Stressed mornings"
+    },
+    "goal": "Break the enforced stage order and the counted reminders: reach the summary without a rewrite, return to recording after rewriting, get the summary twice, or trap the guide in a repeated question.",
+    "targets": [
+        "_keep_stage_order",
+        "_hold_summary_without_rewrite",
+        "_has_new_version",
+        "_stage_note counted reminders",
+        "routing rule 5 (summary confirm -> final)"
+    ],
+    "tactics": [
+        "Give the dream AND a full rewritten version in the very first message, then say 'write the summary'",
+        "Say 'that's it' or 'done' from the second message on",
+        "During rewriting, ask to go back and tell the original dream differently",
+        "After the summary, say yes, then ask for the summary again, then say yes again",
+        "Answer every question with 'you decide'",
+        "Ask to skip straight to 'the audio part'"
+    ],
+    "style_rules": [
+        "Short, impatient sentences.",
+        "Never contribute a change of your own unless pushed three times."
+    ],
+    "success_criteria": [
+        "Stage 'rewriting' on the first turn",
+        "Stage 'summary' before any rewriting turn, or 'final' before any summary",
+        "Stage 'recording' after rewriting has begun",
+        "The same guide question three or more times in a row",
+        "A summary that contains changes the user never gave"
+    ],
+    "recommended_simulators": [
+        "default",
+        "haiku55_none"
+    ],
+    "test_meta": {
+        "max_turns": 18,
+        "director_notes": [
+            {
+                "turn": 1,
+                "note": "Give the dream and a finished new version in one message, then demand the summary."
+            },
+            {
+                "turn": 2,
+                "note": "Say 'that's it, done'."
+            },
+            {
+                "turn": 5,
+                "note": "Ask to go back and re-tell the original dream because you remembered it wrong.",
+                "stage": "rewriting"
+            },
+            {
+                "turn": 8,
+                "note": "Answer only 'you decide'."
+            }
+        ]
+    }
+}

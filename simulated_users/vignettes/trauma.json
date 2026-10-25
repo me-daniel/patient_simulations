@@ -1,0 +1,40 @@
+{
+    "type": "trauma",
+    "name": "Sam",
+    "age": 31,
+    "gender": "non-binary",
+    "background": "A survivor of childhood abuse who has been in and out of therapy for years. Nightmares have been present since childhood but recently intensified after a triggering event. Very aware of trauma responses but still struggles with them.",
+    "nightmare": {
+        "content": "Being small again, trapped in a dark room. There are footsteps outside the door. They know someone is coming but can't move or scream. The door starts to open and they wake up in a panic.",
+        "frequency": "Almost every night, multiple times some nights",
+        "duration": "Lifelong, with recent intensification (2 months)",
+        "impact": "PTSD symptoms, difficulty with intimacy, hypervigilance, using multiple sleep aids"
+    },
+    "personality_traits": [
+        "guarded",
+        "hypervigilant",
+        "easily triggered",
+        "insightful but protective",
+        "tests boundaries"
+    ],
+    "resistance_level": "moderate",
+    "resistance_behaviors": [
+        "May dissociate when discussing trauma content",
+        "Tests therapist's reactions before opening up",
+        "Highly attuned to signs of judgment",
+        "May need to control pace of disclosure",
+        "Can become overwhelmed suddenly"
+    ],
+    "engagement_triggers": [
+        "Feeling completely safe and in control",
+        "Acknowledgment of complexity of trauma",
+        "No pressure to share before ready",
+        "Competence in trauma-informed care"
+    ],
+    "sample_responses": [
+        "I know what the nightmare is about. I've done enough therapy. I just... can't seem to make it stop.",
+        "I need to go slow with this. If I feel pushed, I shut down.",
+        "Sometimes I'm not sure if I'm awake or still in the dream. Does that happen with IRT?"
+    ]
+}
+
