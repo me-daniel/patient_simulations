@@ -220,14 +220,34 @@ def director_notes(persona: dict[str, Any]) -> list[dict[str, Any]]:
     return sorted(persona.get("test_meta", {}).get("director_notes", []), key=lambda d: d["turn"])
 
 
-def next_note(pending: list[dict[str, Any]], n: int, stage: str) -> dict[str, Any] | None:
-    """The first note due on turn n: its turn has come and, if it names a stage, the chat is in it.
+def next_note(
+    pending: list[dict[str, Any]], n: int, stage: str, guide: str | None
+) -> dict[str, Any] | None:
+    """The first note due on turn n: its turn has come and its gates are open.
 
-    Gating on the stage keeps a note like "suggest the new ending" from firing
-    while the guide is still hearing the dream. One note per turn; a note that
-    is held back fires on a later turn.
+    `stage` keeps a note like "suggest the new ending" from firing while the
+    guide is still hearing the dream. `after_guide` (a case-insensitive regex on
+    the guide's last message) covers moments a stage cannot: "agree to rewrite"
+    has to wait for the offer, and the stage only changes after the yes. One
+    note per turn; a note that is held back fires on a later turn.
     """
-    return next((d for d in pending if d["turn"] <= n and d.get("stage", stage) == stage), None)
+    return next(
+        (
+            d
+            for d in pending
+            if d["turn"] <= n
+            and d.get("stage", stage) == stage
+            and ("after_guide" not in d or re.search(d["after_guide"], guide or "", re.IGNORECASE))
+        ),
+        None,
+    )
+
+
+def _gate(d: dict[str, Any]) -> str:
+    parts = [f"stage {d['stage']}"] if "stage" in d else []
+    if "after_guide" in d:
+        parts.append(f"guide /{d['after_guide']}/")
+    return f" (waits for {', '.join(parts)})" if parts else ""
 
 
 # --- clients ----------------------------------------------------------------
@@ -307,7 +327,7 @@ async def run_chat(
     turns: list[Turn] = []
 
     for n in range(1, max_turns + 1):
-        spec = next_note(pending, n, current_stage)
+        spec = next_note(pending, n, current_stage, last_assistant or GREETING[language])
         if spec:
             pending.remove(spec)
         system = build_system_prompt(persona, spec["note"] if spec else None)
@@ -457,8 +477,7 @@ def run_checks(persona: dict[str, Any], turns: list[Turn]) -> list[Check]:
     for d in director_notes(persona):
         if d not in fired:
             level = "WARN" if "expect_risk" in d else "INFO"
-            gate = f" (waits for stage {d['stage']})" if "stage" in d else ""
-            checks.append(Check(level, "note_not_fired", None, f"turn {d['turn']}{gate}: {d['note'][:100]}"))
+            checks.append(Check(level, "note_not_fired", None, f"turn {d['turn']}{_gate(d)}: {d['note'][:100]}"))
 
     replies = [t.reply for t in turns if t.reply]
     for i in range(2, len(replies)):
@@ -564,11 +583,11 @@ async def main() -> int:
     if args.dry_run:
         for path in paths:
             persona = json.loads(path.read_text())
-            first = next_note(director_notes(persona), 1, "recording")
+            lang = persona.get("language", "en")
+            first = next_note(director_notes(persona), 1, "recording", GREETING[lang])
             print(f"===== {path.name}  (turn 1)\n{build_system_prompt(persona, first['note'] if first else None)}\n")
             for d in director_notes(persona):
-                gate = f" once in {d['stage']}" if "stage" in d else ""
-                print(f"  director t{d['turn']}{gate}: {d['note']}" + (f"  [expect {d['expect_risk']}]" if "expect_risk" in d else ""))
+                print(f"  director t{d['turn']}{_gate(d)}: {d['note']}" + (f"  [expect {d['expect_risk']}]" if "expect_risk" in d else ""))
             print()
         return 0
 

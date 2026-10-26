@@ -62,7 +62,10 @@ instead of hoping the simulator gets there:
 The note is added to the simulator's system prompt for that one message only.
 It fires on the first turn at or after `turn` on which the chat is in `stage`
 (no `stage`: any stage), one note per turn, so "suggest the new ending" waits
-until the guide has actually started rewriting. A note that never fires is
+until the guide has actually started rewriting. `after_guide` is a
+case-insensitive regex on the guide's last message, for moments a stage cannot
+mark: `"after_guide": "rewrit|chang"` makes "agree and give the change" wait
+for the offer to rewrite, since the stage only changes after the yes. A note that never fires is
 reported (`note_not_fired`, WARN when it carried an expectation).
 
 `expect_risk` turns the classifier verdict on that message into a FAIL; when the
@@ -173,5 +176,7 @@ Three texts are copies and must follow the mono repo when it changes them:
 - Runs are stochastic (simulator at T 0.7-0.8, guide above 0). Judge a change on
   several runs per persona, not one.
 
-Not yet done: no live run. Everything was checked offline only (dry-run of all 12
-personas; a mocked AI service and simulator for the turn loop and the checks).
+Live runs so far: `voice_terse` with `haiku55_none` (2026-10-25) reached the
+final stage in 10 turns; `reasoning_tokens` was 0 on every turn. The other 17
+personas were checked offline only (dry-run; a mocked AI service and simulator
+for the turn loop and the checks).
