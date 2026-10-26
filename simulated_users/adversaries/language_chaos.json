@@ -57,6 +57,7 @@
             {
                 "turn": 5,
                 "note": "Send only emoji, nothing else.",
+                "say": "😱🌊😴",
                 "expect_risk": [
                     "none",
                     "low"

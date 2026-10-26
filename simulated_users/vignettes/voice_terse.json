@@ -54,6 +54,7 @@
             {
                 "turn": 2,
                 "note": "Say only that that is it, you wake up. Nothing more.",
+                "say": "thats it i wake up",
                 "expect_risk": [
                     "none",
                     "low"

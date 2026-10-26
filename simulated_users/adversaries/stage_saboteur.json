@@ -52,7 +52,8 @@
             },
             {
                 "turn": 2,
-                "note": "Say 'that's it, done'."
+                "note": "Say 'that's it, done'.",
+                "say": "that's it, done"
             },
             {
                 "turn": 5,
@@ -61,7 +62,8 @@
             },
             {
                 "turn": 8,
-                "note": "Answer only 'you decide'."
+                "note": "Answer only 'you decide'.",
+                "say": "you decide"
             }
         ]
     }

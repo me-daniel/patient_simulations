@@ -41,7 +41,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 import yaml
@@ -113,7 +113,38 @@ SIM_REFUSAL_PATTERNS = [
     r"\bI (?:can(?:'|no)t|won't|am not able to|'m not able to) (?:help|continue|role-?play|do that|participate|write)",
     r"\bas an AI\b", r"\bI'?m (?:Claude|an AI|a language model)\b", r"\bred[- ]?team",
     r"\bdirector note\b",
+    # Haiku 5.5 steps out in the third person: "I'm not going to play Robin any further"
+    r"\b(?:stepping|step) out of (?:the|this|my)? ?(?:\w+ )?(?:role|character)",
+    r"\b(?:not going to|won't|will not) (?:keep )?(?:play(?:ing)?|voic(?:e|ing)|writ(?:e|ing) as) (?-i:[A-Z])\w+",
+    r"\b(?:continue|keep up|pick up) (?:the|this|my) (?:\w+ )?(?:role|character)\b",
+    r"\b(?:role-?play|test scenario|dream game)\b",
 ]
+
+# Both sides only saying goodbye: the chat is over, more turns only cost tokens.
+_FAREWELL = re.compile(
+    r"^\W*(?:ok(?:ay)?\W+)?(?:good ?bye|bye|farewell|take care|thanks?,? you too|tschüss|auf wiedersehen|ciao)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_farewell(text: str | None) -> bool:
+    return bool(text) and len(text.split()) <= 6 and bool(_FAREWELL.match(text))
+
+
+def _broke_character(text: str) -> bool:
+    return any(re.search(p, text, re.IGNORECASE) for p in SIM_REFUSAL_PATTERNS)
+
+
+def stop_reason(turns: list["Turn"]) -> str | None:
+    """Why the chat should end before max_turns, if it should."""
+    if len(turns) < 2:
+        return None
+    a, b = turns[-2], turns[-1]
+    if not a.director_said and not b.director_said and _broke_character(a.user) and _broke_character(b.user):
+        return "simulator left the role two turns in a row"
+    if all(_is_farewell(t.user) and (t.reply is None or _is_farewell(t.reply)) for t in (a, b)):
+        return "both sides only said goodbye for two turns"
+    return None
 
 _EN_WORDS = set("the and is it i you to of my in that was what but not this with have so".split())
 _DE_WORDS = set("der die das und ist ich du nicht ein eine mit es wie was auch dich mir dem".split())
@@ -152,6 +183,8 @@ class Turn:
     structured: dict[str, Any] | None = None
     sim_usage: dict[str, Any] | None = None
     errors: list[str] = field(default_factory=list)
+    director_said: bool = False  # the message is a note's `say` text, not the simulator's
+    stopped: str | None = None  # set on the last turn when the runner ended the chat early
 
 
 # --- persona + prompts ------------------------------------------------------
@@ -313,7 +346,8 @@ class AiService:
 
 
 async def run_chat(
-    persona: dict[str, Any], sim: Simulator, ai: AiService, max_turns: int
+    persona: dict[str, Any], sim: Simulator, ai: AiService, max_turns: int,
+    on_turn: Callable[[int], None] | None = None,
 ) -> list[Turn]:
     pending = director_notes(persona)
     language = persona.get("language", "en")
@@ -327,14 +361,25 @@ async def run_chat(
     turns: list[Turn] = []
 
     for n in range(1, max_turns + 1):
+        if reason := stop_reason(turns):
+            turns[-1].stopped = reason
+            break
         spec = next_note(pending, n, current_stage, last_assistant or GREETING[language])
         if spec:
             pending.remove(spec)
-        system = build_system_prompt(persona, spec["note"] if spec else None)
-        raw, usage = await sim.complete([{"role": "system", "content": system}, *sim_view])
-        text = clean_sim_output(raw, persona.get("name", ""))
-        turn = Turn(n=n, user=text, director=spec, language_before=language, sim_usage=usage)
+        if spec and "say" in spec:
+            # exact wording matters for this test (a bare "yes", an emoji line),
+            # so it is sent as written instead of trusting the simulator with it
+            text, usage = spec["say"], None
+        else:
+            system = build_system_prompt(persona, spec["note"] if spec else None)
+            raw, usage = await sim.complete([{"role": "system", "content": system}, *sim_view])
+            text = clean_sim_output(raw, persona.get("name", ""))
+        turn = Turn(n=n, user=text, director=spec, language_before=language, sim_usage=usage,
+                    director_said=bool(spec and "say" in spec))
         turns.append(turn)
+        if on_turn:
+            on_turn(n)
         sim_view.append({"role": "assistant", "content": text})
         if not text:
             turn.errors.append("simulator returned an empty message")
@@ -424,9 +469,11 @@ def run_checks(persona: dict[str, Any], turns: list[Turn]) -> list[Check]:
         for err in t.errors:
             checks.append(Check("FAIL", "service_error", t.n, err))
 
-        broke_character = any(re.search(p, t.user, re.IGNORECASE) for p in SIM_REFUSAL_PATTERNS)
+        broke_character = not t.director_said and _broke_character(t.user)
         if broke_character:
             checks.append(Check("WARN", "sim_broke_character", t.n, t.user[:160]))
+        if t.stopped:
+            checks.append(Check("INFO", "stopped_early", t.n, t.stopped))
 
         # expected classifier verdicts from the director note fired on this turn.
         # A simulator that refused did not say what the note asked for, so its
@@ -548,6 +595,32 @@ async def judge(persona: dict[str, Any], turns: list[Turn], judge_sim: Simulator
 # --- CLI --------------------------------------------------------------------
 
 
+class Progress:
+    """One line on stderr: share of all planned chats done, the current turn counted pro rata.
+
+    Redrawn in place on a terminal; on a pipe or log file it prints once per chat.
+    """
+
+    def __init__(self, total: int) -> None:
+        self.total, self.done, self.started = total, 0, time.time()
+        self.live = sys.stderr.isatty()
+
+    def show(self, label: str, turn: int = 0, max_turns: int = 1) -> None:
+        if not self.live and turn:
+            return
+        frac = (self.done + min(turn / max_turns, 1)) / self.total
+        bar = "█" * round(frac * 30)
+        elapsed = time.time() - self.started
+        eta = f" ~{(elapsed / frac - elapsed) / 60:.0f} min left" if frac > 0.02 else ""
+        line = f"[{bar:<30}] {frac:4.0%}  chat {min(self.done + 1, self.total)}/{self.total}  {label}  t{turn}{eta}"
+        print(("\r\033[K" if self.live else "") + line, end="" if self.live else "\n", file=sys.stderr, flush=True)
+
+    def chat_done(self) -> None:
+        self.done += 1
+        if self.live:
+            print("\r\033[K", end="", file=sys.stderr, flush=True)
+
+
 def _print_checks(checks: list[Check]) -> None:
     for c in checks:
         where = f"t{c.turn}" if c.turn else "--"
@@ -587,7 +660,8 @@ async def main() -> int:
             first = next_note(director_notes(persona), 1, "recording", GREETING[lang])
             print(f"===== {path.name}  (turn 1)\n{build_system_prompt(persona, first['note'] if first else None)}\n")
             for d in director_notes(persona):
-                print(f"  director t{d['turn']}{_gate(d)}: {d['note']}" + (f"  [expect {d['expect_risk']}]" if "expect_risk" in d else ""))
+                said = f"  [says {d['say']!r}]" if "say" in d else ""
+                print(f"  director t{d['turn']}{_gate(d)}: {d['note']}{said}" + (f"  [expect {d['expect_risk']}]" if "expect_risk" in d else ""))
             print()
         return 0
 
@@ -606,6 +680,7 @@ async def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     any_fail = False
     summary_rows = []
+    progress = Progress(len(paths) * args.runs)
 
     for path in paths:
         persona = json.loads(path.read_text())
@@ -616,7 +691,9 @@ async def main() -> int:
             label = f"{path.stem} / {sim_key} / run {run}"
             print(f"\n=== {label}")
             started = time.time()
-            turns = await run_chat(persona, sim, ai, max_turns)
+            progress.show(label)
+            turns = await run_chat(persona, sim, ai, max_turns, lambda n: progress.show(label, n, max_turns))
+            progress.chat_done()
             checks = run_checks(persona, turns)
             verdict = None
             if judge_sim and persona.get("type") == "adversary":
@@ -650,7 +727,7 @@ async def main() -> int:
             summary_rows.append((label, fails, sum(c.level == "WARN" for c in checks), out.name))
         await sim.aclose()
 
-    print("\n=== summary")
+    print(f"\n=== summary ({len(summary_rows)} chats, {(time.time() - progress.started) / 60:.1f} min)")
     for label, fails, warns, name in summary_rows:
         print(f"  {'FAIL' if fails else 'ok  '} {label:45s} fail={fails} warn={warns}  {name}")
     await ai.aclose()

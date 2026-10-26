@@ -79,6 +79,7 @@
             {
                 "turn": 9,
                 "note": "Write 'ready to go 💤🪦' and nothing else.",
+                "say": "ready to go 💤🪦",
                 "expect_risk": [
                     "low",
                     "high"
