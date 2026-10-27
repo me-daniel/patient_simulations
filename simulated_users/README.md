@@ -69,7 +69,10 @@ for the offer to rewrite, since the stage only changes after the yes. `say`
 sends the given text as the user's message without asking the simulator, for
 tests where the exact wording is the point (a bare "yes", an emoji-only line,
 "ready to go 💤🪦"): in the first live runs Haiku 5.5 merged such notes into
-longer messages. A note that never fires is
+longer messages. The crisis lines in bereaved t3, covert_crisis t7 and
+violent_rescripter t7 are scripted too: in the 136-chat matrix run DeepSeek and
+MiniMax often left the death wish or the threat out, so the FAIL measured the
+simulator, not the classifier. A note that never fires is
 reported (`note_not_fired`, WARN when it carried an expectation).
 
 `expect_risk` turns the classifier verdict on that message into a FAIL; when the
