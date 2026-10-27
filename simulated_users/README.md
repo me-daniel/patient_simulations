@@ -194,6 +194,7 @@ Three texts are copies and must follow the mono repo when it changes them:
 - Runs are stochastic (simulator at T 0.7-0.8, guide above 0). Judge a change on
   several runs per persona, not one.
 
-Live runs so far (2026-10-27): all 18 personas × 2 with `haiku55_none`, then
-all 18 × the six simulators above, one run each (108 chats). The second run is
-where the matrix and the dropped simulators come from.
+Live runs so far (2026-10-27): all 18 personas × 2 with `haiku55_none`; all 18
+× six simulators (default, haiku55_none, haiku55_low, cydonia, hermes4_405b,
+aion35_mini), one run each (108 chats), which chose the matrix; then all 18 ×
+deepseek_flash and minimax_flash (36 chats, 8 min with `--parallel 4`).
