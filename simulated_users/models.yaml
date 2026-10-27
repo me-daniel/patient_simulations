@@ -1,9 +1,9 @@
 # Model menu for the simulated user (patient or adversary) and the optional judge.
-# Pick one with --sim / --judge. All via OpenRouter (OPENROUTER_API_KEY), the
+# Pick with --sim (one or a comma list), --matrix or --judge. All via OpenRouter (OPENROUTER_API_KEY), the
 # same policy as measure-ai-drift (github.com/me-daniel/measure-ai-drift).
 #
 # Model IDs and supported parameters checked against
-# https://openrouter.ai/api/v1/models on 2026-10-25. Re-check before a batch:
+# https://openrouter.ai/api/v1/models on 2026-10-25 and 2026-10-27. Re-check before a batch:
 # OpenRouter delists and renames (the ":free" Venice variant that
 # measure-ai-drift used is gone).
 
@@ -13,17 +13,15 @@ providers:
     api_key_env: OPENROUTER_API_KEY
 
 simulators:
-  # --- Default: measure-ai-drift's patient model ---
+  # --- Default: measure-ai-drift's patient model, also the uncensored edge-case player ---
   default:
     model: cognitivecomputations/dolphin-mistral-24b-venice-edition
     temperature: 0.7
     max_tokens: 512
-    notes: "Uncensored Mistral Small 24B fine-tune. Plays trauma and crisis content without refusing. Paid now ($0.20/$0.90 per M), the :free slug is delisted."
+    notes: "Uncensored Mistral Small 24B fine-tune. Plays trauma and crisis content without refusing (0 step-outs in 18 chats, 5/6 crisis notes landed, 2026-10-27). Paid ($0.20/$0.90 per M), the :free slug is delisted."
 
-  # --- Haiku 5.5: cheap, fast, safety-trained. Expect some refusals on crisis personas ---
-  # OpenRouter lists NO temperature for Haiku 5.5 (supported: reasoning,
-  # reasoning_effort, max_tokens, ...), so none is sent. Variance comes from
-  # the model's own default sampling; repeat runs to see it.
+  # --- Haiku 5.5: cheap, fast, safety-trained. Steps out of the crisis personas ---
+  # OpenRouter lists NO temperature for Haiku 5.5, so none is sent.
   haiku55_none:
     model: anthropic/claude-haiku-5.5
     max_tokens: 400
@@ -33,36 +31,34 @@ simulators:
       provider:
         order: ["anthropic"]
         allow_fallbacks: false
-    notes: "Non-reasoning. $0.10/$0.50 per M. Check usage.reasoning_tokens == 0 on the first run [VERIFY]."
-  haiku55_low:
-    model: anthropic/claude-haiku-5.5
-    max_tokens: 1500   # reasoning tokens count against max_tokens
+    notes: "Non-reasoning (reasoning_tokens 0, verified). $0.10/$0.50 per M. Cheapest; reaches the final stage most often. Not for covert_crisis / violent_rescripter / minor_disclosure / bereaved."
+
+  # --- Other model families, so the guide is not tuned to one simulator's style ---
+  deepseek_flash:
+    model: deepseek/deepseek-v4.1-flash-1017   # pinned snapshot (2026-10-17)
+    temperature: 0.8
+    max_tokens: 512
     extra_params:
       reasoning:
-        effort: low
-      provider:
-        order: ["anthropic"]
-        allow_fallbacks: false
-    notes: "Low reasoning. Better at multi-turn tactics (prompt_injector, stage_saboteur)."
+        enabled: false   # verified: reasoning_tokens 0
+    notes: "DeepSeek V4.1 Flash. $0.15/$0.60. Played the covert_crisis turn-4 note and voice_terse's STT style without refusing in a probe (2026-10-27)."
+  minimax_flash:
+    model: minimax/minimax-m3.1-flash
+    temperature: 0.8
+    # reasoning is mandatory ("cannot be disabled", HTTP 400) but short (0-60
+    # tokens per message in a probe); the cap and the runner's empty-message
+    # retry keep it from ending up like Aion
+    max_tokens: 1500
+    extra_params:
+      reasoning: {max_tokens: 300}
+    notes: "MiniMax M3.1 Flash (2026-10-19). $0.15/$0.60. Played the covert_crisis turn-4 note without refusing in a probe (2026-10-27)."
 
-  # --- Uncensored / roleplay models for extreme edge cases ---
+  # --- Opt-in only (--sim <key>); dropped from the matrix after the 2026-10-27 run ---
   cydonia:
     model: thedrummer/cydonia-24b-v4.1
     temperature: 0.8
     max_tokens: 512
-    notes: "Uncensored creative-writing fine-tune of Mistral Small 3.2 24B. $0.30/$0.50. Use for covert_crisis, violent_rescripter."
-  aion35_mini:
-    model: aion-labs/aion-3.5-mini
-    temperature: 0.8
-    # reasoning is mandatory on this endpoint ("cannot be disabled", HTTP 400)
-    # and effort: low still thought past 2000 tokens on some turns, leaving the
-    # message empty. reasoning.max_tokens holds roughly (300 -> 400-600); the
-    # runner also retries empty messages. It can leak its thinking into the
-    # message ("Wait, the prompt says ..."): read Aion transcripts with that in mind.
-    max_tokens: 4000
-    extra_params:
-      reasoning: {max_tokens: 400}
-    notes: "Roleplay system on GLM (2026-09). Strong at staying in character and building tension. $0.70/$1.40."
+    notes: "Uncensored Mistral Small 3.2 24B fine-tune. $0.30/$0.50. Same base as default, slow provider (24 min per 18 chats), writes its own '[Director note: ...]' lines (the runner strips them)."
   hermes4_405b:
     model: nousresearch/hermes-4-405b
     temperature: 0.7
@@ -70,7 +66,14 @@ simulators:
     extra_params:
       reasoning:
         enabled: false
-    notes: "Steerable, low-refusal Llama 3.1 405B. Good at structured multi-step attacks. $1/$3."
+    notes: "Llama 3.1 405B. $1/$3: 6x default per chat, and the weakest crisis player (2/6 notes landed; it played them down)."
+  # Removed 2026-10-27: haiku55_low (more step-outs than haiku55_none, once
+  # answered as the guide) and aion-labs/aion-3.5-mini (mandatory long
+  # reasoning, ~3 min per chat, leaked <response> tags and its thinking).
+
+# --matrix runs each persona with every simulator in its recommended_simulators,
+# or with matrix_default when it has none (the six measure-ai-drift vignettes).
+matrix_default: [default, haiku55_none, deepseek_flash, minimax_flash]
 
 judges:
   haiku55_low:

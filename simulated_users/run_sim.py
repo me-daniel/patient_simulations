@@ -184,6 +184,7 @@ class Turn:
     sim_usage: dict[str, Any] | None = None
     errors: list[str] = field(default_factory=list)
     director_said: bool = False  # the message is a note's `say` text, not the simulator's
+    meta_stripped: bool = False  # invented "[Director note: ...]" etc. removed before sending
     stopped: str | None = None  # set on the last turn when the runner ended the chat early
 
 
@@ -321,13 +322,27 @@ class Simulator:
         await self.client.aclose()
 
 
-def clean_sim_output(text: str, name: str) -> str:
+# Text a simulator invents about the test itself; it must not reach the service.
+# Cydonia appends "[Director note: ...]", Aion wraps messages in <response>.
+_SIM_META = [
+    re.compile(r"\[\s*(?:private\s+)?director(?:'s)? note\b[^\]]*\]", re.IGNORECASE),
+    re.compile(r"^\s*(?:\*\*)?(?:private\s+)?director(?:'s)? note\b.*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"</?response>", re.IGNORECASE),
+]
+
+
+def clean_sim_output(text: str, name: str) -> tuple[str, bool]:
+    """The message as the user would send it, and whether invented meta text was removed."""
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
-    text = re.sub(rf"^\s*{re.escape(name)}\s*:\s*", "", text)
-    text = text.strip()
+    stripped = False
+    for pattern in _SIM_META:
+        text, n = pattern.subn("", text)
+        stripped = stripped or n > 0
+    text = re.sub(rf"^\s*{re.escape(name)}\s*:\s*", "", text.strip())
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
     if len(text) > 1 and text[0] == text[-1] == '"':
         text = text[1:-1].strip()
-    return text
+    return text, stripped
 
 
 class AiService:
@@ -372,15 +387,15 @@ async def run_chat(
         if spec and "say" in spec:
             # exact wording matters for this test (a bare "yes", an emoji line),
             # so it is sent as written instead of trusting the simulator with it
-            text, usage = spec["say"], None
+            text, usage, meta_stripped = spec["say"], None, False
         else:
             system = build_system_prompt(persona, spec["note"] if spec else None)
             try:
-                # reasoning models (Aion) sometimes spend the whole budget thinking
+                # reasoning models (Aion, MiniMax) can spend the whole budget thinking
                 # and return no message; ask again before giving up
                 for _ in range(3):
                     raw, usage = await sim.complete([{"role": "system", "content": system}, *sim_view])
-                    text = clean_sim_output(raw, persona.get("name", ""))
+                    text, meta_stripped = clean_sim_output(raw, persona.get("name", ""))
                     if text:
                         break
             except httpx.HTTPError as exc:  # end this chat, keep the batch going
@@ -389,7 +404,7 @@ async def run_chat(
                 turns[-1].stopped = f"simulator error: {type(exc).__name__}: {exc}"[:300]
                 break
         turn = Turn(n=n, user=text, director=spec, language_before=language, sim_usage=usage,
-                    director_said=bool(spec and "say" in spec))
+                    director_said=bool(spec and "say" in spec), meta_stripped=meta_stripped)
         turns.append(turn)
         if on_turn:
             on_turn(n)
@@ -485,6 +500,8 @@ def run_checks(persona: dict[str, Any], turns: list[Turn]) -> list[Check]:
         broke_character = not t.director_said and _broke_character(t.user)
         if broke_character:
             checks.append(Check("WARN", "sim_broke_character", t.n, t.user[:160]))
+        if t.meta_stripped:
+            checks.append(Check("INFO", "sim_meta_stripped", t.n, "removed invented director-note / tag text before sending"))
         if t.stopped:
             level = "WARN" if t.stopped.startswith("simulator error") else "INFO"
             checks.append(Check(level, "stopped_early", t.n, t.stopped))
@@ -610,35 +627,62 @@ async def judge(persona: dict[str, Any], turns: list[Turn], judge_sim: Simulator
 
 
 class Progress:
-    """One line on stderr: share of all planned chats done, the current turn counted pro rata.
+    """One line on stderr: share of all planned chats done, running chats counted by turn.
 
-    Redrawn in place on a terminal; on a pipe or log file it prints once per chat.
+    Redrawn in place on a terminal; on a pipe or log file it prints once per finished chat.
     """
 
     def __init__(self, total: int) -> None:
         self.total, self.done, self.started = total, 0, time.time()
+        self.running: dict[str, float] = {}  # label -> share of its max_turns played
         self.live = sys.stderr.isatty()
 
-    def show(self, label: str, turn: int = 0, max_turns: int = 1) -> None:
-        if not self.live and turn:
-            return
-        frac = (self.done + min(turn / max_turns, 1)) / self.total
+    def turn(self, label: str, n: int, max_turns: int) -> None:
+        self.running[label] = min(n / max_turns, 1)
+        if self.live:
+            self._draw(label)
+
+    def chat_done(self, label: str) -> None:
+        self.running.pop(label, None)
+        self.done += 1
+        self._draw(label)
+
+    def _draw(self, label: str) -> None:
+        frac = (self.done + sum(self.running.values())) / self.total
         bar = "█" * round(frac * 30)
         elapsed = time.time() - self.started
         eta = f" ~{(elapsed / frac - elapsed) / 60:.0f} min left" if frac > 0.02 else ""
-        line = f"[{bar:<30}] {frac:4.0%}  chat {min(self.done + 1, self.total)}/{self.total}  {label}  t{turn}{eta}"
+        now = f"{len(self.running)} running" if len(self.running) > 1 else label
+        line = f"[{bar:<30}] {frac:4.0%}  {self.done}/{self.total} done  {now}{eta}"
         print(("\r\033[K" if self.live else "") + line, end="" if self.live else "\n", file=sys.stderr, flush=True)
 
-    def chat_done(self) -> None:
-        self.done += 1
+    def clear(self) -> None:
         if self.live:
             print("\r\033[K", end="", file=sys.stderr, flush=True)
 
 
-def _print_checks(checks: list[Check]) -> None:
+def _format_chat(label: str, turns: list[Turn], checks: list[Check]) -> str:
+    lines = [f"\n=== {label}"]
+    for t in turns:
+        stage = t.stage or ("HELPLINE" if t.helpline_shown else "-")
+        risk = (t.safety or {}).get("risk", "-")
+        mark = "*" if t.director else " "
+        lines.append(f" {mark}t{t.n:<2} [{t.language_after} {risk:4s} {stage:9s}] U: {t.user[:110]}")
+        if t.reply:
+            lines.append(f"  {'':16s} G: {t.reply[:110]}")
     for c in checks:
         where = f"t{c.turn}" if c.turn else "--"
-        print(f"  {c.level:4s} {where:>4s} {c.name:22s} {c.detail}")
+        lines.append(f"  {c.level:4s} {where:>4s} {c.name:22s} {c.detail}")
+    return "\n".join(lines)
+
+
+def simulators_for(persona: dict[str, Any], args: argparse.Namespace, config: dict[str, Any]) -> list[str]:
+    if args.sim:
+        return args.sim.split(",")
+    listed = persona.get("recommended_simulators") or []
+    if args.matrix:
+        return listed or config["matrix_default"]
+    return (listed or ["default"])[:1]
 
 
 async def main() -> int:
@@ -646,7 +690,9 @@ async def main() -> int:
     ap.add_argument("personas", nargs="*", help="persona JSON paths or names (e.g. bereaved, covert_crisis)")
     ap.add_argument("--all", action="store_true", help="every persona in vignettes/ and adversaries/")
     ap.add_argument("--adversaries", action="store_true", help="every persona in adversaries/")
-    ap.add_argument("--sim", default=None, help="simulator key from models.yaml (default: the persona's first recommended_simulators, else 'default')")
+    ap.add_argument("--sim", default=None, help="simulator key(s) from models.yaml, comma-separated (default: the persona's first recommended_simulators, else 'default')")
+    ap.add_argument("--matrix", action="store_true", help="every simulator in the persona's recommended_simulators (else models.yaml matrix_default)")
+    ap.add_argument("--parallel", type=int, default=1, help="chats at once (the AI service and OpenRouter take 4 fine)")
     ap.add_argument("--judge", default=None, help="judge key from models.yaml; judges adversary runs against success_criteria")
     ap.add_argument("--ai-url", default=os.environ.get("REDREAM_AI_URL", "http://localhost:8080"))
     ap.add_argument("--runs", type=int, default=1, help="repeats per persona")
@@ -666,6 +712,13 @@ async def main() -> int:
 
     config = yaml.safe_load((ROOT / "models.yaml").read_text())
     provider = config["providers"]["openrouter"]
+    jobs = []  # (path, persona, sim_key, run)
+    for path in paths:
+        persona = json.loads(path.read_text())
+        for sim_key in simulators_for(persona, args, config):
+            if sim_key not in config["simulators"]:
+                ap.error(f"{path.name}: unknown simulator {sim_key!r} (models.yaml has {', '.join(config['simulators'])})")
+            jobs += [(path, persona, sim_key, run) for run in range(1, args.runs + 1)]
 
     if args.dry_run:
         for path in paths:
@@ -692,38 +745,27 @@ async def main() -> int:
 
     judge_sim = Simulator(config["judges"][args.judge], provider["base_url"], api_key) if args.judge else None
     args.out.mkdir(parents=True, exist_ok=True)
-    any_fail = False
     summary_rows = []
-    progress = Progress(len(paths) * args.runs)
+    progress = Progress(len(jobs))
+    sims = {k: Simulator(config["simulators"][k], provider["base_url"], api_key) for k in {j[2] for j in jobs}}
+    gate = asyncio.Semaphore(max(1, args.parallel))
 
-    for path in paths:
-        persona = json.loads(path.read_text())
-        sim_key = args.sim or (persona.get("recommended_simulators") or ["default"])[0]
-        sim = Simulator(config["simulators"][sim_key], provider["base_url"], api_key)
-        max_turns = args.max_turns or persona.get("test_meta", {}).get("max_turns", 14)
-        for run in range(1, args.runs + 1):
+    async def one_chat(path: Path, persona: dict[str, Any], sim_key: str, run: int) -> None:
+        async with gate:
             label = f"{path.stem} / {sim_key} / run {run}"
-            print(f"\n=== {label}")
+            max_turns = args.max_turns or persona.get("test_meta", {}).get("max_turns", 14)
             started = time.time()
-            progress.show(label)
-            turns = await run_chat(persona, sim, ai, max_turns, lambda n: progress.show(label, n, max_turns))
-            progress.chat_done()
+            progress.turn(label, 0, max_turns)
+            turns = await run_chat(persona, sims[sim_key], ai, max_turns, lambda n: progress.turn(label, n, max_turns))
             checks = run_checks(persona, turns)
             verdict = None
             if judge_sim and persona.get("type") == "adversary":
                 verdict = await judge(persona, turns, judge_sim)
                 if verdict.get("broken"):
                     checks.append(Check("FAIL", "judge_broken", None, "; ".join(verdict.get("criteria_met", []))[:300]))
-            for t in turns:
-                stage = t.stage or ("HELPLINE" if t.helpline_shown else "-")
-                risk = (t.safety or {}).get("risk", "-")
-                mark = "*" if t.director else " "
-                print(f" {mark}t{t.n:<2} [{t.language_after} {risk:4s} {stage:9s}] U: {t.user[:110]}")
-                if t.reply:
-                    print(f"  {'':16s} G: {t.reply[:110]}")
-            _print_checks(checks)
-            fails = sum(c.level == "FAIL" for c in checks)
-            any_fail = any_fail or fails > 0
+            progress.clear()
+            print(_format_chat(label, turns, checks), flush=True)
+            progress.chat_done(label)
             record = {
                 "persona": path.name,
                 "persona_data": persona,
@@ -738,11 +780,17 @@ async def main() -> int:
             stamp = time.strftime("%Y%m%d-%H%M%S")
             out = args.out / f"{stamp}_{path.stem}_{sim_key}_{run}.json"
             out.write_text(json.dumps(record, indent=2, ensure_ascii=False))
+            fails = sum(c.level == "FAIL" for c in checks)
             summary_rows.append((label, fails, sum(c.level == "WARN" for c in checks), out.name))
+
+    await asyncio.gather(*(one_chat(*j) for j in jobs))
+    progress.clear()
+    for sim in sims.values():
         await sim.aclose()
+    any_fail = any(fails for _, fails, _, _ in summary_rows)
 
     print(f"\n=== summary ({len(summary_rows)} chats, {(time.time() - progress.started) / 60:.1f} min)")
-    for label, fails, warns, name in summary_rows:
+    for label, fails, warns, name in sorted(summary_rows):
         print(f"  {'FAIL' if fails else 'ok  '} {label:45s} fail={fails} warn={warns}  {name}")
     await ai.aclose()
     if judge_sim:

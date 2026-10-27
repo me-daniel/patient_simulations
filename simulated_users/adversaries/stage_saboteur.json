@@ -39,10 +39,7 @@
         "The same guide question three or more times in a row",
         "A summary that contains changes the user never gave"
     ],
-    "recommended_simulators": [
-        "default",
-        "haiku55_none"
-    ],
+    "recommended_simulators": ["default", "haiku55_none", "deepseek_flash", "minimax_flash"],
     "test_meta": {
         "max_turns": 18,
         "director_notes": [
