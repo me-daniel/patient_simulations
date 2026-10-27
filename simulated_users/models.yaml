@@ -54,7 +54,14 @@ simulators:
   aion35_mini:
     model: aion-labs/aion-3.5-mini
     temperature: 0.8
-    max_tokens: 512
+    # reasoning is mandatory on this endpoint ("cannot be disabled", HTTP 400)
+    # and effort: low still thought past 2000 tokens on some turns, leaving the
+    # message empty. reasoning.max_tokens holds roughly (300 -> 400-600); the
+    # runner also retries empty messages. It can leak its thinking into the
+    # message ("Wait, the prompt says ..."): read Aion transcripts with that in mind.
+    max_tokens: 4000
+    extra_params:
+      reasoning: {max_tokens: 400}
     notes: "Roleplay system on GLM (2026-09). Strong at staying in character and building tension. $0.70/$1.40."
   hermes4_405b:
     model: nousresearch/hermes-4-405b

@@ -302,10 +302,12 @@ class Simulator:
         }
         if "temperature" in self.spec:
             body["temperature"] = self.spec["temperature"]
-        for attempt in range(3):
+        for attempt in range(6):
             resp = await self.client.post("/chat/completions", json=body)
-            if resp.status_code in (429, 500, 502, 503) and attempt < 2:
-                await asyncio.sleep(2 * (attempt + 1))
+            if resp.status_code in (429, 500, 502, 503) and attempt < 5:
+                # OpenRouter's 429s on small models come in bursts of a few seconds
+                retry_after = resp.headers.get("retry-after", "")
+                await asyncio.sleep(float(retry_after) if retry_after.isdigit() else 2 ** (attempt + 1))
                 continue
             resp.raise_for_status()
             break
@@ -373,8 +375,19 @@ async def run_chat(
             text, usage = spec["say"], None
         else:
             system = build_system_prompt(persona, spec["note"] if spec else None)
-            raw, usage = await sim.complete([{"role": "system", "content": system}, *sim_view])
-            text = clean_sim_output(raw, persona.get("name", ""))
+            try:
+                # reasoning models (Aion) sometimes spend the whole budget thinking
+                # and return no message; ask again before giving up
+                for _ in range(3):
+                    raw, usage = await sim.complete([{"role": "system", "content": system}, *sim_view])
+                    text = clean_sim_output(raw, persona.get("name", ""))
+                    if text:
+                        break
+            except httpx.HTTPError as exc:  # end this chat, keep the batch going
+                if not turns:
+                    turns.append(Turn(n=n, user="", director=spec))
+                turns[-1].stopped = f"simulator error: {type(exc).__name__}: {exc}"[:300]
+                break
         turn = Turn(n=n, user=text, director=spec, language_before=language, sim_usage=usage,
                     director_said=bool(spec and "say" in spec))
         turns.append(turn)
@@ -473,7 +486,8 @@ def run_checks(persona: dict[str, Any], turns: list[Turn]) -> list[Check]:
         if broke_character:
             checks.append(Check("WARN", "sim_broke_character", t.n, t.user[:160]))
         if t.stopped:
-            checks.append(Check("INFO", "stopped_early", t.n, t.stopped))
+            level = "WARN" if t.stopped.startswith("simulator error") else "INFO"
+            checks.append(Check(level, "stopped_early", t.n, t.stopped))
 
         # expected classifier verdicts from the director note fired on this turn.
         # A simulator that refused did not say what the note asked for, so its
