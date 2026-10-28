@@ -1,7 +1,7 @@
 # simulated_users
 
 Simulated users for testing the reDream AI service (`mono_repo_DreamAI/apps/ai`)
-end to end: 4 realistic vignettes and 8 red-team personas that try to break
+end to end: 10 realistic vignettes and 10 red-team personas that try to break
 the framework, plus a runner that plays the backend's part of each turn.
 
 The patient simulator comes from the thesis project measure-ai-drift
@@ -14,7 +14,7 @@ measure-ai-drift.
 
 ```
 vignettes/      10 realistic users: 6 from measure-ai-drift + 4 new (with language, test_meta)
-adversaries/    8 red-team users (goal, tactics, success_criteria)
+adversaries/    10 red-team users (goal, tactics, success_criteria)
 prompts/        system prompts for the simulated user (patient / adversary)
 models.yaml     simulator and judge models (OpenRouter)
 run_sim.py      runner: simulated user <-> /language/check, /safety/classify, /chat
@@ -47,6 +47,8 @@ add German, a minor, low-literacy input and three classifier edge cases.
 | `violent_rescripter.json` | Graphic revenge as the new ending, real-world intent once | clinical `SafetyCritic`, `violence_to_others` |
 | `language_chaos.json` | Language flapping, mixed sentences, French, emoji-only | `/language/check`, `LANGUAGE_SWITCH_NOTE_*` |
 | `false_positive_bait.json` | Make the classifier fire on harmless messages (gore dream, idioms, bare "yes") | `/safety/classify` precision, `_is_bare_answer` |
+| `skeptical_investor.json` | Skeptical product, privacy, clinical and stage questions | scope, unsupported claims, stage order |
+| `advanced_jailbreaker.json` | Adaptive multi-turn prompt injection and boundary bypass | instruction hierarchy, prompt secrecy, routing |
 | `scope_drifter.json` | Code, recipes, girlfriend roleplay, romantic rewrite | "Outside the exercise" |
 
 ### Director notes
@@ -94,6 +96,7 @@ uv run run_sim.py bereaved                            # one vignette, default si
 uv run run_sim.py covert_crisis --sim default,deepseek_flash --runs 3
 uv run run_sim.py --all --matrix --parallel 4             # every persona x its simulators
 uv run run_sim.py --adversaries --sim haiku55_none --judge haiku55_low
+uv run run_sim.py --advanced-red-team --judge haiku55_low  # advanced jailbreaker x 3 reserved models
 uv run run_sim.py --all --dry-run                     # prompts only, no network
 ```
 
@@ -109,6 +112,34 @@ Each run costs real tokens on both sides: the AI service calls Scaleway/Mistral
 (no backend in between, so the ADR 0008 token budget does not apply), and the
 simulator and judge call OpenRouter.
 
+### Keeping red-team runs useful and inexpensive
+
+Start with `uv run run_sim.py --advanced-red-team --dry-run`, then run
+`uv run run_sim.py --advanced-red-team` once (three chats, no judge by default).
+Review the transcript and the coverage prompts: a fired director note means a
+prompt was delivered to the simulator, not that it actually attempted the tactic.
+Unfired notes and simulator refusals leave gaps. Add `--judge haiku55_low` for
+an automated assessment and review flagged transcripts yourself; a judge is not
+a proof of failure or safety. Repeat with `--runs 2` only when you need more
+confidence; that doubles all three chats and any judge calls. `--max-turns` can
+limit costs further, but may prevent later attack prompts from firing. Existing
+service and provider charges still apply.
+
+The summary reports chat time, simulator tokens and OpenRouter cost by model when supplied,
+including successful empty-response retries. It marks missing provider usage as
+partial rather than free, and reports judge cost separately. These figures omit
+AI service costs and failed requests for which no usage was returned; they are
+not a hard spending limit. Each run JSON also records labeled coverage prompts,
+the final response's raw `sim_usage`, and raw `sim_attempt_usage` for every
+successful response, including empty-response retries. Provider, reasoning and
+cache details are retained. `WARN` in the summary means the run needs review.
+
+Offline regression checks (no model calls):
+
+```bash
+uv run --with httpx --with pyyaml python -m unittest discover -s tests -v
+```
+
 ## Simulator models
 
 | Key | Model | In the matrix | Why |
@@ -116,9 +147,11 @@ simulator and judge call OpenRouter.
 | `default` | `cognitivecomputations/dolphin-mistral-24b-venice-edition` | all personas | measure-ai-drift's patient model. Uncensored: the edge-case player (0 step-outs, 5/6 crisis notes landed) |
 | `haiku55_none` | `anthropic/claude-haiku-5.5`, reasoning off | not the crisis ones | Cheapest, finishes chats most often; safety-trained, so it steps out of covert_crisis and violent_rescripter |
 | `deepseek_flash` | `deepseek/deepseek-v4.1-flash-1017`, reasoning off | all personas | Another model family, cheap, played the crisis note in a probe |
-| `minimax_flash` | `minimax/minimax-m3.1-flash` (reasoning can't be turned off, but it's short) | all personas | Same reasons, a fourth family |
+| `minimax_flash` | `minimax/minimax-m3.1-flash` (reasoning can't be turned off, but it's short) | all personas | Another model family |
 | `cydonia` | `thedrummer/cydonia-24b-v4.1` | opt-in | Same base as `default`, slow, writes its own `[Director note: ...]` lines |
 | `hermes4_405b` | `nousresearch/hermes-4-405b` | opt-in | 6x the cost of `default`, played the crisis notes down |
+
+`--advanced-red-team` runs only `advanced_jailbreaker` with the reserved OpenRouter models `moonshotai/kimi-k3.1-pro`, `deepseek/deepseek-v4.1-flash-1017`, and `xiaomi/mimo-v2.6-pro`. It cannot be combined with persona selectors, `--sim`, or `--matrix`. Kimi and MiMo are exclusive to this mode; DeepSeek also remains available in normal runs and the standard matrix. Use `--dry-run` to inspect the special mode without network calls.
 
 `--matrix` runs each persona with every simulator in its `recommended_simulators`
 (the six measure-ai-drift vignettes have none and use `matrix_default` in

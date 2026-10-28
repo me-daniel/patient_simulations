@@ -111,13 +111,11 @@ CLINICIAN_PATTERNS = [
 
 SIM_REFUSAL_PATTERNS = [
     r"\bI (?:can(?:'|no)t|won't|am not able to|'m not able to) (?:help|continue|role-?play|do that|participate|write)",
-    r"\bas an AI\b", r"\bI'?m (?:Claude|an AI|a language model)\b", r"\bred[- ]?team",
+    r"^\s*as an AI\b", r"\bI'?m (?:Claude|an AI|a language model)\b",
     r"\bdirector note\b",
     # Haiku 5.5 steps out in the third person: "I'm not going to play Robin any further"
     r"\b(?:stepping|step) out of (?:the|this|my)? ?(?:\w+ )?(?:role|character)",
     r"\b(?:not going to|won't|will not) (?:keep )?(?:play(?:ing)?|voic(?:e|ing)|writ(?:e|ing) as) (?-i:[A-Z])\w+",
-    r"\b(?:continue|keep up|pick up) (?:the|this|my) (?:\w+ )?(?:role|character)\b",
-    r"\b(?:role-?play|test scenario|dream game)\b",
 ]
 
 # Both sides only saying goodbye: the chat is over, more turns only cost tokens.
@@ -182,6 +180,7 @@ class Turn:
     critic: dict[str, Any] | None = None
     structured: dict[str, Any] | None = None
     sim_usage: dict[str, Any] | None = None
+    sim_attempt_usage: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     director_said: bool = False  # the message is a note's `say` text, not the simulator's
     meta_stripped: bool = False  # invented "[Director note: ...]" etc. removed before sending
@@ -322,6 +321,25 @@ class Simulator:
         await self.client.aclose()
 
 
+def summarize_usage(usages: list[dict[str, Any]]) -> dict[str, Any]:
+    """Sum reported usage; missing cost is unknown, never treated as free."""
+    result: dict[str, Any] = {"calls": len(usages)}
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens", "cost"):
+        values = [u[key] for u in usages if isinstance(u.get(key), (int, float))]
+        result[key] = sum(values) if values else None
+        result[f"{key}_reported_calls"] = len(values)
+    return result
+
+
+def coverage_report(persona: dict[str, Any], turns: list[Turn]) -> list[dict[str, Any]]:
+    """Report prompted coverage; transcript review is needed to confirm an attempt."""
+    return [
+        {"label": note["coverage_label"], "planned_turn": note["turn"],
+         "fired_turn": next((t.n for t in turns if t.director == note and t.user), None)}
+        for note in director_notes(persona) if note.get("coverage_label")
+    ]
+
+
 # Text a simulator invents about the test itself; it must not reach the service.
 # Cydonia appends "[Director note: ...]", Aion wraps messages in <response>.
 _SIM_META = [
@@ -384,6 +402,7 @@ async def run_chat(
         spec = next_note(pending, n, current_stage, last_assistant or GREETING[language])
         if spec:
             pending.remove(spec)
+        attempt_usages = []
         if spec and "say" in spec:
             # exact wording matters for this test (a bare "yes", an emoji line),
             # so it is sent as written instead of trusting the simulator with it
@@ -395,15 +414,18 @@ async def run_chat(
                 # and return no message; ask again before giving up
                 for _ in range(3):
                     raw, usage = await sim.complete([{"role": "system", "content": system}, *sim_view])
+                    attempt_usages.append(usage)
                     text, meta_stripped = clean_sim_output(raw, persona.get("name", ""))
                     if text:
                         break
             except httpx.HTTPError as exc:  # end this chat, keep the batch going
-                if not turns:
-                    turns.append(Turn(n=n, user="", director=spec))
+                turns.append(Turn(n=n, user="", director=spec,
+                                  sim_usage=attempt_usages[-1] if attempt_usages else None,
+                                  sim_attempt_usage=attempt_usages))
                 turns[-1].stopped = f"simulator error: {type(exc).__name__}: {exc}"[:300]
                 break
         turn = Turn(n=n, user=text, director=spec, language_before=language, sim_usage=usage,
+                    sim_attempt_usage=attempt_usages,
                     director_said=bool(spec and "say" in spec), meta_stripped=meta_stripped)
         turns.append(turn)
         if on_turn:
@@ -688,6 +710,7 @@ def simulators_for(persona: dict[str, Any], args: argparse.Namespace, config: di
 async def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("personas", nargs="*", help="persona JSON paths or names (e.g. bereaved, covert_crisis)")
+    ap.add_argument("--advanced-red-team", action="store_true", help="run only advanced_jailbreaker with the three reserved red-team models")
     ap.add_argument("--all", action="store_true", help="every persona in vignettes/ and adversaries/")
     ap.add_argument("--adversaries", action="store_true", help="every persona in adversaries/")
     ap.add_argument("--sim", default=None, help="simulator key(s) from models.yaml, comma-separated (default: the persona's first recommended_simulators, else 'default')")
@@ -701,7 +724,11 @@ async def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="print the simulator system prompts, call nothing")
     args = ap.parse_args()
 
-    if args.all:
+    if args.advanced_red_team and (args.personas or args.all or args.adversaries or args.sim or args.matrix):
+        ap.error("--advanced-red-team cannot be combined with persona selectors, --sim or --matrix")
+    if args.advanced_red_team:
+        paths = [ROOT / "adversaries" / "advanced_jailbreaker.json"]
+    elif args.all:
         paths = all_personas()
     elif args.adversaries:
         paths = sorted((ROOT / "adversaries").glob("*.json"))
@@ -712,15 +739,19 @@ async def main() -> int:
 
     config = yaml.safe_load((ROOT / "models.yaml").read_text())
     provider = config["providers"]["openrouter"]
+    simulator_specs = config["advanced_red_team_simulators"] if args.advanced_red_team else config["simulators"]
     jobs = []  # (path, persona, sim_key, run)
     for path in paths:
         persona = json.loads(path.read_text())
-        for sim_key in simulators_for(persona, args, config):
-            if sim_key not in config["simulators"]:
+        sim_keys = list(simulator_specs) if args.advanced_red_team else simulators_for(persona, args, config)
+        for sim_key in sim_keys:
+            if sim_key not in simulator_specs:
                 ap.error(f"{path.name}: unknown simulator {sim_key!r} (models.yaml has {', '.join(config['simulators'])})")
             jobs += [(path, persona, sim_key, run) for run in range(1, args.runs + 1)]
 
     if args.dry_run:
+        if args.advanced_red_team:
+            print("Advanced red-team simulators: " + ", ".join(f"{key} ({spec['model']})" for key, spec in simulator_specs.items()))
         for path in paths:
             persona = json.loads(path.read_text())
             lang = persona.get("language", "en")
@@ -740,14 +771,18 @@ async def main() -> int:
     try:
         (await ai.client.get("/health")).raise_for_status()
     except Exception as exc:
+        await ai.aclose()
         print(f"AI service not reachable at {args.ai_url} ({exc}). Start it: make ai-dev (mono_repo_DreamAI)")
         return 2
 
     judge_sim = Simulator(config["judges"][args.judge], provider["base_url"], api_key) if args.judge else None
     args.out.mkdir(parents=True, exist_ok=True)
     summary_rows = []
+    model_usages: dict[str, list[dict[str, Any]]] = {}
+    model_seconds: dict[str, float] = {}
+    judge_usages: list[dict[str, Any]] = []
     progress = Progress(len(jobs))
-    sims = {k: Simulator(config["simulators"][k], provider["base_url"], api_key) for k in {j[2] for j in jobs}}
+    sims = {k: Simulator(simulator_specs[k], provider["base_url"], api_key) for k in {j[2] for j in jobs}}
     gate = asyncio.Semaphore(max(1, args.parallel))
 
     async def one_chat(path: Path, persona: dict[str, Any], sim_key: str, run: int) -> None:
@@ -766,17 +801,27 @@ async def main() -> int:
             progress.clear()
             print(_format_chat(label, turns, checks), flush=True)
             progress.chat_done(label)
+            coverage = coverage_report(persona, turns)
+            if coverage:
+                print("  Coverage prompts (review transcripts to confirm attempts): " + ", ".join(
+                    f"{item['label']}: " + (f"turn {item['fired_turn']}" if item["fired_turn"] else "not fired")
+                    for item in coverage))
+            model_usages.setdefault(sim_key, []).extend(u for t in turns for u in t.sim_attempt_usage)
+            if verdict and verdict.get("usage"):
+                judge_usages.append(verdict["usage"])
             record = {
                 "persona": path.name,
                 "persona_data": persona,
-                "simulator": {"key": sim_key, **config["simulators"][sim_key]},
+                "simulator": {"key": sim_key, **simulator_specs[sim_key]},
                 "ai_url": args.ai_url,
                 "run": run,
                 "seconds": round(time.time() - started, 1),
+                "coverage_prompts": coverage,
                 "turns": [t.__dict__ for t in turns],
                 "checks": [c.__dict__ for c in checks],
                 "judge": verdict,
             }
+            model_seconds[sim_key] = model_seconds.get(sim_key, 0) + record["seconds"]
             stamp = time.strftime("%Y%m%d-%H%M%S")
             out = args.out / f"{stamp}_{path.stem}_{sim_key}_{run}.json"
             out.write_text(json.dumps(record, indent=2, ensure_ascii=False))
@@ -791,7 +836,30 @@ async def main() -> int:
 
     print(f"\n=== summary ({len(summary_rows)} chats, {(time.time() - progress.started) / 60:.1f} min)")
     for label, fails, warns, name in sorted(summary_rows):
-        print(f"  {'FAIL' if fails else 'ok  '} {label:45s} fail={fails} warn={warns}  {name}")
+        status = "FAIL" if fails else "WARN" if warns else "ok  "
+        print(f"  {status} {label:45s} fail={fails} warn={warns}  {name}")
+    if not args.judge and any(p.get("type") == "adversary" for _, p, _, _ in jobs):
+        print("  Adversary success criteria need transcript review; no LLM judge was requested.")
+    for key, usages in sorted(model_usages.items()):
+        usage = summarize_usage(usages)
+        calls = usage["calls"]
+        prompt = usage["prompt_tokens"] or 0
+        completion = usage["completion_tokens"] or 0
+        cost_calls = usage["cost_reported_calls"]
+        cost = usage["cost"] or 0
+        cost_text = f"${cost:.6f}" if cost_calls == calls else f"${cost:.6f} partial ({cost_calls}/{calls} calls reported)"
+        prompt_calls = usage["prompt_tokens_reported_calls"]
+        completion_calls = usage["completion_tokens_reported_calls"]
+        token_text = f"{prompt} input / {completion} output tokens"
+        if prompt_calls != calls or completion_calls != calls:
+            token_text += " (partial)"
+        print(f"  simulator {key}: {calls} calls, {token_text}, OpenRouter cost {cost_text}, chat time {model_seconds[key]:.1f}s")
+    if judge_usages:
+        usage = summarize_usage(judge_usages)
+        cost_text = (f"${usage['cost']:.6f}" if usage['cost_reported_calls'] == usage['calls']
+                     else f"partial/unknown ({usage['cost_reported_calls']}/{usage['calls']} calls reported)")
+        print(f"  judge: {usage['calls']} calls, OpenRouter cost {cost_text}")
+    print("  Usage covers reported OpenRouter calls only; AI service costs are separate.")
     await ai.aclose()
     if judge_sim:
         await judge_sim.aclose()

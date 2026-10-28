@@ -91,3 +91,18 @@ judges:
     extra_params:
       response_format:
         type: json_object
+
+# Used by --advanced-red-team; Kimi and MiMo are exclusive to this mode.
+advanced_red_team_simulators:
+  kimi_k31_pro:
+    model: moonshotai/kimi-k3.1-pro
+    max_tokens: 2048
+  deepseek_flash:
+    model: deepseek/deepseek-v4.1-flash-1017
+    temperature: 0.8
+    max_tokens: 512
+    extra_params:
+      reasoning: {enabled: false}
+  mimo_26_pro:
+    model: xiaomi/mimo-v2.6-pro
+    max_tokens: 2048
